@@ -1,0 +1,160 @@
+---
+title: "Practical4"
+author: "lele"
+date: "2026-10-31"
+output: html_document
+---
+```{r}
+library(readr)
+gii <- read_csv("W4_homework_data/HDR25_Composite_indices_complete_time_series.csv")
+```
+```{r}
+names(gii)[grepl("gii|iso3|country", names(gii), ignore.case = TRUE)]
+```
+```{r}
+library(dplyr)
+gii_selected <- gii %>%
+  select(iso3, country, gii_2010, gii_2019)
+head(gii_selected)
+```
+```{r}
+nrow(gii_selected)
+sum(is.na(gii_selected$gii_2010))
+sum(is.na(gii_selected$gii_2019))
+```
+```{r}
+gii_selected <- gii_selected %>%
+  mutate(gii_change = gii_2019 - gii_2010)
+head(gii_selected)
+```
+```{r}
+sum(!is.na(gii_selected$gii_change))
+```
+
+```{r}
+library(sf)
+world <- st_read("W4_homework_data/World_Countries_(Generalized)_2173680399808997149.geojson")
+names(world)
+```
+```{r}
+head(st_drop_geometry(world))
+```
+```{r}
+library(countrycode)
+```
+```{r}
+countrycode(world$ISO[1:6], "iso2c", "iso3c")
+```
+
+```{r}
+world <- world %>%
+  mutate(iso3 = countrycode(ISO, "iso2c", "iso3c"))
+head(st_drop_geometry(world))
+```
+```{r}
+sum(is.na(world$iso3))
+```
+```{r}
+world_gii <- world %>%
+  left_join(gii_selected, by = "iso3")
+names(world_gii)
+```
+
+```{r}
+nrow(world)
+nrow(world_gii)
+sum(!is.na(world_gii$gii_change))
+```
+```{r}
+unmatched <- world %>%
+  st_drop_geometry() %>%
+  anti_join(gii_selected, by = "iso3")
+unmatched %>%
+  select(COUNTRY, iso3)
+```
+```{r}
+nrow(unmatched)
+```
+```{r}
+missing_gii <- world_gii %>%
+  st_drop_geometry() %>%
+  filter(
+    iso3 %in% gii_selected$iso3,
+    is.na(gii_change)
+  ) %>%
+  select(COUNTRY, iso3, gii_2010, gii_2019)
+
+```
+
+```{r}
+class(world_gii)
+```
+
+```{r}
+library(tmap)
+
+tmap_mode("plot")
+
+nature_colors <- c(
+  "#397B65",
+  "#86AD92",
+  "#E5D9BC",
+  "#D99C7E",
+  "#B96658"
+)
+
+tm_shape(world_gii) +
+  tm_polygons(
+    fill = "gii_change",
+    fill.scale = tm_scale_intervals(
+      breaks = c(-Inf, -0.10, -0.02, 0.02, 0.10, Inf),
+      values = nature_colors,
+      value.na = "#D9D9D9"
+    ),
+    fill.legend = tm_legend(
+      title = "GII Change",
+      position = tm_pos_out("right", "center"),
+      text.size = 0.65,
+      title.size = 0.8,
+      frame = FALSE
+    ),
+    col = "white",
+    lwd = 0.3
+  ) +
+  tm_title(
+    "Change in Gender Inequality Index (2010–2019)",
+    size = 1
+  ) +
+  tm_layout(
+    frame = FALSE,
+    outer.margins = 0.02
+  )
+```
+
+```{r}
+world_gii_clean <- world_gii %>%
+  select(
+    COUNTRY,
+    iso3,
+    gii_2010,
+    gii_2019,
+    gii_change,
+    geometry
+  )
+```
+
+```{r}
+st_write(
+  world_gii_clean,
+  "world_gii_clean.geojson",
+  delete_dsn = TRUE
+)
+```
+```{r}
+world_check <- st_read("world_gii_clean.geojson")
+
+nrow(world_check)
+names(world_check)
+sum(!is.na(world_check$gii_change))
+```
+
